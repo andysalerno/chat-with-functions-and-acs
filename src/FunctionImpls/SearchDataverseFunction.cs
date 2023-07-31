@@ -17,7 +17,6 @@ internal class SearchDataverseFunction : IFunction
         new FunctionBuilder(FunctionName)
             .WithDescription("Search Dataverse using a fuzzy keyword string query")
             .WithParameter(FieldNames.SearchQuery, FunctionBuilder.Type.String, "The keyword search query; filters NOT supported", isRequired: true)
-            // .WithEnumParameter(FieldNames.EntityType, "Optional. Limit results to these entity types", new[] { "msdyn_workorder", "msdyn_booking" }, isRequired: false)
             .WithEnumParameter(FieldNames.EntityType, "Optional. Limit results to these entity types", new[] { "workorder" }, isRequired: false)
             .Build();
 
@@ -26,17 +25,6 @@ internal class SearchDataverseFunction : IFunction
         Parameters parameters = JsonSerializer.Deserialize<Parameters>(call.Arguments)
             ?? throw new InvalidOperationException("Could not parse arguments as Parameters.");
 
-        string? entityName = null;
-
-        if (parameters.EntityName.ToLower().Contains("workorder"))
-        {
-            entityName = "msdyn_workorder";
-        }
-
-        // else if (parameters.EntityName.ToLower().Contains("booking"))
-        // {
-        //    entityName = "bookableresourcebooking";
-        // }
         string workOrderJson = await _dataverseClient.SearchDataverse(new DataverseClient.RelevancySearchQuery());
 
         return new FunctionResult(isSuccess: true, workOrderJson);

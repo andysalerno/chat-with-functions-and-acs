@@ -159,7 +159,6 @@ internal class DataverseClient
         return responseContent;
     }
 
-    // public async Task<string> GetEntityJsonByIdAsync(string entityName, string entityId)
     public async Task<JsonDocument> GetEntityJsonByIdAsync(string entityName, string entityId)
     {
         using HttpClient httpClient = await CreateClient();
@@ -174,26 +173,13 @@ internal class DataverseClient
 
         string responseContent = await response.Content.ReadAsStringAsync();
 
-        var jsonDocument = await JsonSerializer.DeserializeAsync<JsonDocument>(response.Content.ReadAsStream());
+        var jsonDocument = await JsonSerializer.DeserializeAsync<JsonDocument>(response.Content.ReadAsStream())
+            ?? throw new Exception("Could not parse response.");
 
-        // return responseContent;
         return jsonDocument;
     }
 
     public async Task<JsonDocument> GetWorkOrderJsonByIdAsync(string id) => await GetEntityJsonByIdAsync("msdyn_workorders", id);
-
-    public class RelevancySearchQuery
-    {
-        public string RelevancySearchQueryText { get; init; } = string.Empty;
-
-        public string? DateFieldName { get; set; }
-
-        public string? EntityName { get; set; }
-
-        public DateTimeOffset? NotBeforeUtc { get; set; }
-
-        public DateTimeOffset? NotAfterUtc { get; set; }
-    }
 
     private static string? BuildDateQueryString(RelevancySearchQuery searchQuery)
     {
@@ -258,6 +244,19 @@ internal class DataverseClient
 
             return acquired.AccessToken;
         }
+    }
+
+    public class RelevancySearchQuery
+    {
+        public string RelevancySearchQueryText { get; init; } = string.Empty;
+
+        public string? DateFieldName { get; set; }
+
+        public string? EntityName { get; set; }
+
+        public DateTimeOffset? NotBeforeUtc { get; set; }
+
+        public DateTimeOffset? NotAfterUtc { get; set; }
     }
 
     private class ODataList
