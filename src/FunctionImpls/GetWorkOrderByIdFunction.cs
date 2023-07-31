@@ -24,9 +24,10 @@ internal class GetWorkOrderByIdFunction : IFunction
         GetWorkOrderParameters parameters = JsonSerializer.Deserialize<GetWorkOrderParameters>(call.Arguments)
             ?? throw new InvalidOperationException("Could not parse arguments as GetWorkOrderParameters.");
 
-        string workOrderJson = await _dataverseClient.GetWorkOrderJsonByIdAsync(parameters.WorkOrderId);
+        JsonDocument workOrderJson = await _dataverseClient.GetWorkOrderJsonByIdAsync(parameters.WorkOrderId);
 
         // Bit of a hack: remove null values from the json, since they make up a large portion of the json and waste tokens.
+        string serialized;
         {
             Dictionary<string, object> asDict = JsonSerializer.Deserialize<Dictionary<string, object>>(workOrderJson) ?? throw new Exception("Could not parse work order json.");
 
@@ -38,15 +39,12 @@ internal class GetWorkOrderByIdFunction : IFunction
                 }
             }
 
-            workOrderJson = JsonSerializer.Serialize(asDict);
+            serialized = JsonSerializer.Serialize(asDict);
         }
 
         return new FunctionResult(
             isSuccess: true,
-            new
-            {
-                workOrderJson,
-            });
+            serialized);
     }
 
     internal class GetWorkOrderParameters

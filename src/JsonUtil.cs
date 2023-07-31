@@ -18,4 +18,13 @@ public static class JsonUtil
 
         return JsonSerializer.Serialize(asDict);
     }
+
+    public static JsonDocument RemoveNullValues(JsonDocument json)
+    {
+        string jsonString = JsonSerializer.Serialize(json);
+
+        string nullValuesRemoved = RemoveNullValues(jsonString);
+
+        return JsonDocument.Parse(nullValuesRemoved);
+    }
 }

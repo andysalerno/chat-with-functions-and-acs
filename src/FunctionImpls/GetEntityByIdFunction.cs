@@ -31,9 +31,10 @@ internal class GetEntityByIdFunction : IFunction
                 new { error = "The given ID was not a valid guid. This function can only be called on valid guids. Try searching a different way." });
         }
 
-        string entityJson = await _dataverseClient.GetEntityJsonByIdAsync(parameters.EntityType, parameters.EntityId);
+        JsonDocument entityJson = await _dataverseClient.GetEntityJsonByIdAsync(parameters.EntityType, parameters.EntityId);
 
         // Bit of a hack: remove null values from the json, since they make up a large portion of the json and waste tokens.
+        string serialized;
         {
             Dictionary<string, object> asDict = JsonSerializer.Deserialize<Dictionary<string, object>>(entityJson) ?? throw new Exception("Could not parse entity json.");
 
@@ -45,10 +46,10 @@ internal class GetEntityByIdFunction : IFunction
                 }
             }
 
-            entityJson = JsonSerializer.Serialize(asDict);
+            serialized = JsonSerializer.Serialize(asDict);
         }
 
-        return new FunctionResult(isSuccess: true, entityJson);
+        return new FunctionResult(isSuccess: true, serialized);
     }
 
     internal class Parameters

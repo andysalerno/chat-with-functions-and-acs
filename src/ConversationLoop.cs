@@ -2,6 +2,8 @@ using Azure;
 using Azure.AI.OpenAI;
 using azureai.src;
 using Functions;
+using Microsoft.Extensions.Logging;
+using static azureai.src.LoggerProvider;
 
 internal class ConversationLoop
 {
@@ -11,15 +13,12 @@ internal class ConversationLoop
     private readonly IReadOnlyList<IFunction> _functions;
 
     private readonly AIClient _openAIClient;
-    private readonly string _deploymentName;
 
     private readonly List<ChatMessage> _history;
 
     public ConversationLoop(AIClient openAIClient, IReadOnlyList<IFunction> functions)
     {
         _openAIClient = openAIClient;
-
-        _deploymentName = "gpt35t";
 
         _functions = functions;
 
@@ -49,7 +48,7 @@ internal class ConversationLoop
                 // No function to call, so we're done with this turn.
                 if (nextAIMessage.FunctionCall == null)
                 {
-                    Console.WriteLine($"Assistant: {nextAIMessage.Content}");
+                    Logger.LogInformation($"Assistant: {nextAIMessage.Content}");
 
                     break;
                 }
@@ -63,7 +62,7 @@ internal class ConversationLoop
 
                 if (result.IsSuccess == false)
                 {
-                    Console.WriteLine($"Function call failed: {json}");
+                    Logger.LogError($"Function call failed: {json}");
                 }
             }
         }
@@ -93,7 +92,7 @@ internal class ConversationLoop
 
     private static ChatMessage GetUserChatMessage()
     {
-        Console.Write("You: ");
+        Logger.LogInformation("You: ");
         string text = Console.ReadLine() ?? string.Empty;
 
         var message = new ChatMessage(ChatRole.User, text);
@@ -102,11 +101,11 @@ internal class ConversationLoop
 
     private async Task<FunctionResult> InvokeFunctionAsync(FunctionCall functionCall)
     {
-        Console.WriteLine($"Function call requested: {functionCall.Name}({functionCall.Arguments})");
+        Logger.LogInformation($"Function call requested: {functionCall.Name}({functionCall.Arguments})");
 
         if (_functions.FirstOrDefault(f => f.FunctionName == functionCall.Name) is IFunction function)
         {
-            Console.WriteLine($"Found matching function name: {functionCall.Name}");
+            Logger.LogInformation($"Found matching function name: {functionCall.Name}");
             FunctionResult result = await function.InvokeAsync(functionCall);
 
             return result;

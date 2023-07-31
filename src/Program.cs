@@ -25,10 +25,7 @@ var dataverseClient = new DataverseClient(
 // Define the functions that will be available to the model:
 var functions = new List<IFunction>
 {
-     // new GetEntitiesByDateFunction(dataverseClient),
-     // new SearchDataverseFunction(dataverseClient),
-     // new GetEntityByIdFunction(dataverseClient),
-     // new DataverseRelevancySearchFunction(aiClient, dataverseClient),
+     new GetEntityByIdFunction(dataverseClient),
      new GetEntityByRelevancySearchFunction(aiClient, dataverseClient),
 };
 

@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 using Azure.AI.OpenAI;
 using azureai.src.Dataverse;
 using Functions;
+using Microsoft.Extensions.Logging;
+using static azureai.src.LoggerProvider;
 
 namespace azureai.src.FunctionImpls;
 
@@ -41,51 +43,45 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         RelevancySearchQuery relevancySearchQuery = await GenerateRelevancySearchQueryAsync(query);
 
         // List of JSON objects:
-        List<Dictionary<string, object>> searchResultsList = await SearchDataverseAsync(relevancySearchQuery);
+        List<JsonDocument> searchResultsList = await SearchDataverseAsync(relevancySearchQuery);
 
-        string? simplifiedEntity = await GetSimplifiedEntityFromResultAsync(searchResultsList);
+        JsonDocument fullEntityJson = await GetFullEntityFromResultAsync(searchResultsList)
+            ?? throw new Exception("Could not find the entity.");
 
-        var reconstructedList = new List<Dictionary<string, object>>();
+        JsonDocument withNullValuesRemoved = JsonUtil.RemoveNullValues(fullEntityJson);
 
-        foreach (Dictionary<string, object> obj in searchResultsList)
-        {
-            var reconstructedObj = new Dictionary<string, object>();
-
-            foreach (KeyValuePair<string, object> kvp in obj)
-            {
-                if (kvp.Value != null)
-                {
-                    reconstructedObj.Add(kvp.Key, kvp.Value);
-                }
-            }
-
-            reconstructedList.Add(reconstructedObj);
-        }
-
-        string reserialized = JsonSerializer.Serialize(reconstructedList);
+        string reserialized = JsonSerializer.Serialize(withNullValuesRemoved);
 
         return new FunctionResult(isSuccess: true, reserialized);
     }
 
-    private async Task<string?> GetSimplifiedEntityFromResultAsync(List<Dictionary<string, object>> searchResults)
+    private async Task<JsonDocument?> GetFullEntityFromResultAsync(List<JsonDocument> searchResults)
     {
         // This is the ID of the entity with the highest search score:
-        string? topResultEntityId = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.objectid")?.ToString();
-        string? topResultEntityName = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.entityname")?.ToString();
+        // string? topResultEntityId = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.objectid")?.ToString();
+        string? topResultEntityId = searchResults.FirstOrDefault()?.RootElement.GetProperty("@search.objectid").GetString();
+
+        // string? topResultEntityName = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.entityname")?.ToString();
+        string? topResultEntityName = searchResults.FirstOrDefault()?.RootElement.GetProperty("@search.entityname").GetString();
 
         if (topResultEntityId == null || topResultEntityName == null)
         {
             return null;
         }
 
-        string result = await _dataverseClient.GetEntityJsonByIdAsync(topResultEntityName, topResultEntityId);
+        JsonDocument result = await _dataverseClient.GetEntityJsonByIdAsync(topResultEntityName, topResultEntityId);
 
         return result;
     }
 
-    private async Task<List<Dictionary<string, object>>> SearchDataverseAsync(RelevancySearchQuery query)
+    private static string SimplifyEntityJson(string entityJson)
     {
-        Console.WriteLine($"Searching Dataverse Relevancy Search with query: {query.RelevancySearchQueryText}");
+        return "blah";
+    }
+
+    private async Task<List<JsonDocument>> SearchDataverseAsync(RelevancySearchQuery query)
+    {
+        Logger.LogInformation($"Searching Dataverse Relevancy Search with query: {query.RelevancySearchQueryText}");
 
         var getResultsList = async (bool mustMatchAll) =>
         {
@@ -99,7 +95,7 @@ internal class GetEntityByRelevancySearchFunction : IFunction
             JsonElement searchResultsList = dataverseResponseDoc.RootElement.GetProperty("value");
 
             // Convert to list of dictionaries:
-            List<Dictionary<string, object>> listOfObjs = searchResultsList.Deserialize<List<Dictionary<string, object>>>()
+            List<JsonDocument> listOfObjs = searchResultsList.Deserialize<List<JsonDocument>>()
                 ?? throw new Exception("Could not parse json.");
 
             return listOfObjs;
@@ -110,7 +106,7 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         if (!searchResultsList.Any())
         {
             // The original query may have been too narrow - let's try to broaden it.
-            Console.WriteLine("No results - broadening search and trying one more time.");
+            Logger.LogInformation("No results - broadening search and trying one more time.");
             searchResultsList = await getResultsList(false);
         }
 

@@ -1,8 +1,9 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Primitives;
+using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
+using static azureai.src.LoggerProvider;
 
 namespace azureai.src.Dataverse;
 
@@ -70,7 +71,7 @@ internal class DataverseClient
         const string apiVersion = "v9.2";
         string url = $"{_baseUri}/api/data/{apiVersion}/{entityName}?$top={limit}&$filter={combinedFilter}";
 
-        Console.WriteLine($"Hitting uri: {url}");
+        LoggerProvider.Logger.LogInformation($"Hitting uri: {url}");
 
         using HttpClient httpClient = await CreateClient();
 
@@ -158,7 +159,8 @@ internal class DataverseClient
         return responseContent;
     }
 
-    public async Task<string> GetEntityJsonByIdAsync(string entityName, string entityId)
+    // public async Task<string> GetEntityJsonByIdAsync(string entityName, string entityId)
+    public async Task<JsonDocument> GetEntityJsonByIdAsync(string entityName, string entityId)
     {
         using HttpClient httpClient = await CreateClient();
 
@@ -172,10 +174,13 @@ internal class DataverseClient
 
         string responseContent = await response.Content.ReadAsStringAsync();
 
-        return responseContent;
+        var jsonDocument = await JsonSerializer.DeserializeAsync<JsonDocument>(response.Content.ReadAsStream());
+
+        // return responseContent;
+        return jsonDocument;
     }
 
-    public async Task<string> GetWorkOrderJsonByIdAsync(string id) => await GetEntityJsonByIdAsync("msdyn_workorders", id);
+    public async Task<JsonDocument> GetWorkOrderJsonByIdAsync(string id) => await GetEntityJsonByIdAsync("msdyn_workorders", id);
 
     public class RelevancySearchQuery
     {
