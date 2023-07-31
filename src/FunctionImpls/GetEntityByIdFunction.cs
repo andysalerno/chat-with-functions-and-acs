@@ -14,9 +14,9 @@ internal class GetEntityByIdFunction : IFunction
 
     public FunctionDefinition FunctionDefinition =>
         new FunctionBuilder(FunctionName)
-            .WithDescription("Retrieve an entity as json, given a guid of its ID.")
+            .WithDescription("Retrieve an entity as json, given its guid. Call this when you have a guid but you want the entity itself.")
             .WithParameter(FieldNames.EntityId, FunctionBuilder.Type.String, "The guid ID of the entity", isRequired: true)
-            .WithEnumParameter(FieldNames.EntityType, "The type of entity to query", new[] { "msdyn_workorders", "msdyn_bookings" }, isRequired: true)
+            .WithEnumParameter(FieldNames.EntityType, "The type of entity to query", new[] { "msdyn_workorders", "msdyn_bookings" }, isRequired: false)
             .Build();
 
     public async Task<FunctionResult> InvokeAsync(FunctionCall call)

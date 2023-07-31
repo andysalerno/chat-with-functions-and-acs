@@ -29,12 +29,15 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         new FunctionBuilder(FunctionName)
             .WithDescription("Search Dataverse using a query in plain English")
             .WithParameter(FieldNames.PlainTextQuery, FunctionBuilder.Type.String, "The query, in plain English text", isRequired: true)
+            .WithParameter(FieldNames.NoteToUser, FunctionBuilder.Type.String, "A friendly note to the user about what you're doing, so they can sit tight while we work on their request.", isRequired: true)
             .Build();
 
     public async Task<FunctionResult> InvokeAsync(FunctionCall call)
     {
         Parameters parameters = JsonSerializer.Deserialize<Parameters>(call.Arguments)
             ?? throw new InvalidOperationException("Could not parse arguments as Parameters.");
+
+        Logger.LogInformation(parameters.NoteToUser);
 
         // We have the query in plain text - now convince GPT to turn it into a real query.
         string query = parameters.PlainTextQuery;
@@ -45,14 +48,24 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         // List of JSON objects:
         List<JsonDocument> searchResultsList = await SearchDataverseAsync(relevancySearchQuery);
 
-        JsonDocument fullEntityJson = await GetFullEntityFromResultAsync(searchResultsList)
-            ?? throw new Exception("Could not find the entity.");
+        JsonDocument? fullEntityJson = await GetFullEntityFromResultAsync(searchResultsList);
+
+        if (fullEntityJson == null)
+        {
+            return new FunctionResult(isSuccess: false, new { error = "The entity was not found." });
+        }
 
         JsonDocument withNullValuesRemoved = JsonUtil.RemoveNullValues(fullEntityJson);
 
         string reserialized = JsonSerializer.Serialize(withNullValuesRemoved);
 
-        return new FunctionResult(isSuccess: true, reserialized);
+        return new FunctionResult(
+            isSuccess: true,
+            new
+            {
+                system_message = $"If you need a value but see a guid instead, try using the function get_entity_by_guid to expand it",
+                content = reserialized,
+            });
     }
 
     private async Task<JsonDocument?> GetFullEntityFromResultAsync(List<JsonDocument> searchResults)
@@ -72,11 +85,6 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         JsonDocument result = await _dataverseClient.GetEntityJsonByIdAsync(topResultEntityName, topResultEntityId);
 
         return result;
-    }
-
-    private static string SimplifyEntityJson(string entityJson)
-    {
-        return "blah";
     }
 
     private async Task<List<JsonDocument>> SearchDataverseAsync(RelevancySearchQuery query)
@@ -161,21 +169,6 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         return relevancySearchQuery;
     }
 
-    private async Task<IReadOnlyList<string>> GetRelevantTableNamesAsync(string query)
-    {
-        const string systemMessage = "You are an assistant that selects the correct tables to query based on the user's query text, and a list of table names. Your response is always a comma-separated list of the selected table names.";
-
-        string combinedQuery = $"The following is a plaintext query, followed by a list of table names. Select the table names that are relevant to the query. \n\n{query}\n\nmsdyn_workorder\nbookableresourcebooking";
-
-        string response = await _openAIClient.GetSingleCompletionAsync(combinedQuery, systemMessage);
-
-        return response.Split(',');
-    }
-
-    private async Task<string> GetTableSchemaAsync(string tableName) => await _dataverseClient.GetTableSchemaAsync(tableName);
-
-    private string BuildQueryFromSchemas(string plainTextQuery, IReadOnlyList<string> schemas) => "temp";
-
     private static class FieldNames
     {
         public const string PlainTextQuery = "plain_text_query";
@@ -184,12 +177,16 @@ internal class GetEntityByRelevancySearchFunction : IFunction
         public const string NotBeforeUtc = "not_before_utc";
         public const string NotAfterUtc = "not_after_utc";
         public const string DateFieldName = "date_field_name";
+        public const string NoteToUser = "note_to_user";
     }
 
     private class Parameters
     {
         [JsonPropertyName(FieldNames.PlainTextQuery)]
         public string PlainTextQuery { get; set; } = string.Empty;
+
+        [JsonPropertyName(FieldNames.NoteToUser)]
+        public string NoteToUser { get; set; } = string.Empty;
     }
 
     private class RelevancySearchQuery

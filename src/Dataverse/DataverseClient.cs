@@ -169,6 +169,13 @@ internal class DataverseClient
 
         // Note the hack: msdyn_workorder is the name of the entity, but the crazy Dataverse API expects msdy_workorder*s*
         string url = $"{_baseUri}/api/data/{apiVersion}/{entityName}s({id})";
+
+        // Another hack: we are treating msdyn_workorder as a special case
+        if (entityName == "msdyn_workorder")
+        {
+            url = $"{url}?$expand=msdyn_priority($select=msdyn_name),msdyn_serviceaccount($select=name),createdby($select=fullname)";
+        }
+
         HttpResponseMessage response = await httpClient.GetAsync(url);
 
         string responseContent = await response.Content.ReadAsStringAsync();
