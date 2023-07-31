@@ -128,7 +128,29 @@ internal class DataverseClient
             });
         }
 
-        using var requestBody = new StringContent(queryJson, Encoding.UTF8, "application/json");
+        string newQueryJson = string.Empty;
+
+        var queryDict = new Dictionary<string, object>
+        {
+            ["search"] = searchQuery.RelevancySearchQueryText,
+            ["top"] = 10,
+            ["searchmode"] = searchMode,
+        };
+
+        if (dateQuery is not null)
+        {
+            queryDict["filter"] = dateQuery;
+        }
+
+        if (searchQuery.EntityName is not null)
+        {
+            queryDict["entities"] = new[] { searchQuery.EntityName };
+        }
+
+        newQueryJson = JsonSerializer.Serialize(queryDict);
+
+        // using var requestBody = new StringContent(queryJson, Encoding.UTF8, "application/json");
+        using var requestBody = new StringContent(newQueryJson, Encoding.UTF8, "application/json");
         HttpResponseMessage response = await httpClient.PostAsync(url, requestBody);
 
         string responseContent = await response.Content.ReadAsStringAsync();
@@ -144,7 +166,8 @@ internal class DataverseClient
 
         var id = Guid.Parse(entityId);
 
-        string url = $"{_baseUri}/api/data/{apiVersion}/{entityName}({id})";
+        // Note the hack: msdyn_workorder is the name of the entity, but the crazy Dataverse API expects msdy_workorder*s*
+        string url = $"{_baseUri}/api/data/{apiVersion}/{entityName}s({id})";
         HttpResponseMessage response = await httpClient.GetAsync(url);
 
         string responseContent = await response.Content.ReadAsStringAsync();
@@ -159,6 +182,8 @@ internal class DataverseClient
         public string RelevancySearchQueryText { get; init; } = string.Empty;
 
         public string? DateFieldName { get; set; }
+
+        public string? EntityName { get; set; }
 
         public DateTimeOffset? NotBeforeUtc { get; set; }
 

@@ -5,18 +5,23 @@ using azureai.src.Dataverse;
 using Functions;
 
 namespace azureai.src.FunctionImpls;
-internal class MultiStepQueryFunction : IFunction
+
+/// <summary>
+/// A function for the following scenario:
+/// USER: "What's the address of Work Order 12345?"
+/// </summary>
+internal class GetEntityByRelevancySearchFunction : IFunction
 {
     private readonly AIClient _openAIClient;
     private readonly DataverseClient _dataverseClient;
 
-    public MultiStepQueryFunction(AIClient openAIClient, DataverseClient dataverseClient)
+    public GetEntityByRelevancySearchFunction(AIClient openAIClient, DataverseClient dataverseClient)
     {
         _openAIClient = openAIClient;
         _dataverseClient = dataverseClient;
     }
 
-    public string FunctionName => "query_dataverse";
+    public string FunctionName => "query_entity_via_plaintext";
 
     public FunctionDefinition FunctionDefinition =>
         new FunctionBuilder(FunctionName)
@@ -32,9 +37,13 @@ internal class MultiStepQueryFunction : IFunction
         // We have the query in plain text - now convince GPT to turn it into a real query.
         string query = parameters.PlainTextQuery;
 
+        // The LLM turns the plain text query into a simpler query that will work in the relevancy search API:
         RelevancySearchQuery relevancySearchQuery = await GenerateRelevancySearchQueryAsync(query);
 
-        var searchResultsList = await SearchDataverseAsync(relevancySearchQuery);
+        // List of JSON objects:
+        List<Dictionary<string, object>> searchResultsList = await SearchDataverseAsync(relevancySearchQuery);
+
+        string? simplifiedEntity = await GetSimplifiedEntityFromResultAsync(searchResultsList);
 
         var reconstructedList = new List<Dictionary<string, object>>();
 
@@ -58,8 +67,26 @@ internal class MultiStepQueryFunction : IFunction
         return new FunctionResult(isSuccess: true, reserialized);
     }
 
+    private async Task<string?> GetSimplifiedEntityFromResultAsync(List<Dictionary<string, object>> searchResults)
+    {
+        // This is the ID of the entity with the highest search score:
+        string? topResultEntityId = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.objectid")?.ToString();
+        string? topResultEntityName = searchResults.FirstOrDefault()?.GetValueOrDefault("@search.entityname")?.ToString();
+
+        if (topResultEntityId == null || topResultEntityName == null)
+        {
+            return null;
+        }
+
+        string result = await _dataverseClient.GetEntityJsonByIdAsync(topResultEntityName, topResultEntityId);
+
+        return result;
+    }
+
     private async Task<List<Dictionary<string, object>>> SearchDataverseAsync(RelevancySearchQuery query)
     {
+        Console.WriteLine($"Searching Dataverse Relevancy Search with query: {query.RelevancySearchQueryText}");
+
         var getResultsList = async (bool mustMatchAll) =>
         {
             // Get raw json:
@@ -95,10 +122,12 @@ internal class MultiStepQueryFunction : IFunction
         DateTimeOffset now = DateTimeOffset.UtcNow;
         DateTimeOffset twoWeeksAgo = now - TimeSpan.FromDays(14);
 
+        const string functionName = "query_dataverse_relevancy_api";
+
         string systemMessage =
             $"[TIMESTAMP UTC: {now:yyyy-MM-ddTHH:mmzzz}]\n" +
             "You are an assistant that can query Dataverse, given plaintext user queries.\n" +
-            "An example is provided below.\n\n" +
+            $"An example of invoking the function {functionName} is provided below.\n\n" +
             "EXAMPLE:\n" +
             "user input: 'unscheduled work orders for Contoso Coffee Co account'\n" +
             $"expected {FieldNames.RelevancySearchQuery}: 'Contoso Coffee Co unscheduled'\n\n" +
@@ -110,12 +139,13 @@ internal class MultiStepQueryFunction : IFunction
             $"expected {FieldNames.DateFieldName}: 'createdon'";
 
         FunctionDefinition func =
-            new FunctionBuilder("query_dataverse_relevancy_api")
+            new FunctionBuilder(functionName)
                 .WithDescription("Search using the Dataverse Relevancy API, a Lucene-based index search")
                 .WithParameter(FieldNames.RelevancySearchQuery, FunctionBuilder.Type.String, "The keyword query text. Should be short and simple. Must not include entity names, only values.", isRequired: true)
                 .WithParameter(FieldNames.NotBeforeUtc, FunctionBuilder.Type.String, "Optional. Exclude results before this date. E.x. '1997-07-16T19:20Z'", isRequired: false)
                 .WithParameter(FieldNames.NotAfterUtc, FunctionBuilder.Type.String, "Optional. Exclude results after this date. E.x. '1997-07-16T19:20Z'", isRequired: false)
                 .WithEnumParameter(FieldNames.DateFieldName, "The datetime field name to compare against. Required when not_before_utc or not_after_utc is set.", new[] { "createdon", "modifiedon" }, isRequired: false)
+                .WithEnumParameter(FieldNames.EntityName, "Limit results to a particular entity type", new[] { "work_order" }, isRequired: false)
                 .Build();
 
         string response = await _openAIClient.GetSingleFunctionCompletionAsync(
@@ -125,6 +155,12 @@ internal class MultiStepQueryFunction : IFunction
 
         RelevancySearchQuery relevancySearchQuery = JsonSerializer.Deserialize<RelevancySearchQuery>(response)
             ?? throw new InvalidOperationException("Could not parse response as RelevancySearchQuery.");
+
+        if (relevancySearchQuery.EntityName == "work_order")
+        {
+            // Minor hack - the model does better without the "msdyn" prefix, but we need to fix it for the API to succeed.
+            relevancySearchQuery.EntityName = "msdyn_workorder";
+        }
 
         return relevancySearchQuery;
     }
@@ -174,12 +210,16 @@ internal class MultiStepQueryFunction : IFunction
         [JsonPropertyName(FieldNames.NotAfterUtc)]
         public DateTimeOffset? NotAfterUtc { get; set; }
 
+        [JsonPropertyName(FieldNames.EntityName)]
+        public string? EntityName { get; set; }
+
         public DataverseClient.RelevancySearchQuery ToDataverseSearchQuery() => new()
         {
             RelevancySearchQueryText = RelevancySearchQueryText,
             DateFieldName = DateFieldName,
             NotBeforeUtc = NotBeforeUtc,
             NotAfterUtc = NotAfterUtc,
+            EntityName = EntityName,
         };
     }
 }

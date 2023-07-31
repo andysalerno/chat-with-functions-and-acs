@@ -4,6 +4,10 @@ using azureai.src;
 using azureai.src.Dataverse;
 using azureai.src.FunctionImpls;
 using Functions;
+using Microsoft.Extensions.Logging;
+using static azureai.src.LoggerProvider;
+
+Logger.LogInformation("Starting up...");
 
 static string ReadKeyOpenAICredentialKeyFromFile() => File.ReadAllText(".key").Trim();
 
@@ -24,7 +28,8 @@ var functions = new List<IFunction>
      // new GetEntitiesByDateFunction(dataverseClient),
      // new SearchDataverseFunction(dataverseClient),
      // new GetEntityByIdFunction(dataverseClient),
-    new MultiStepQueryFunction(aiClient, dataverseClient),
+     // new DataverseRelevancySearchFunction(aiClient, dataverseClient),
+     new GetEntityByRelevancySearchFunction(aiClient, dataverseClient),
 };
 
 var conversationLoop = new ConversationLoop(aiClient, functions);
