@@ -26,8 +26,8 @@ internal class SearchGraphFunction : IFunction
 
     public async Task<FunctionResult> InvokeAsync(FunctionCall functionCall)
     {
-        var parameters = JsonSerializer.Deserialize<GraphSearchParameters>(functionCall.Arguments)
-            ?? throw new InvalidOperationException("Could not parse arguments as EmailSearchParameters.");
+        var parameters = JsonSerializer.Deserialize<Parameters>(functionCall.Arguments)
+            ?? throw new InvalidOperationException("Could not parse arguments as Parameters.");
 
         if (parameters.PreferredSource == OneDriveSource)
         {
@@ -49,7 +49,7 @@ internal class SearchGraphFunction : IFunction
             });
     }
 
-    internal class GraphSearchParameters
+    internal class Parameters
     {
         [JsonPropertyName("query")]
         public string Query { get; set; } = string.Empty;

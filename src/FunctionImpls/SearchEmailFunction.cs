@@ -16,20 +16,15 @@ internal class SearchEmailFunction : IFunction
     public FunctionDefinition FunctionDefinition =>
         new FunctionBuilder(FunctionName)
             .WithDescription("Search Outlook for emails given a query string")
-            .WithParameter("query", FunctionBuilder.Type.String, "The query string", isRequired: true)
+            .WithParameter(FieldNames.Query, FunctionBuilder.Type.String, "The query string", isRequired: true)
             .Build();
 
     public async Task<FunctionResult> InvokeAsync(FunctionCall functionCall)
     {
-        var parameters = JsonSerializer.Deserialize<EmailSearchParameters>(functionCall.Arguments)
-            ?? throw new InvalidOperationException("Could not parse arguments as EmailSearchParameters.");
+        var parameters = JsonSerializer.Deserialize<Parameters>(functionCall.Arguments)
+            ?? throw new InvalidOperationException("Could not parse arguments as Parameters.");
 
         var emails = await _client.SearchEmailsAsync(parameters.Query);
-
-        foreach (var email in emails)
-        {
-            Console.WriteLine($"Email: {email.Subject}{email.SentDate}\n{email.Body}");
-        }
 
         return new FunctionResult(
             isSuccess: true,
@@ -39,9 +34,14 @@ internal class SearchEmailFunction : IFunction
             });
     }
 
-    internal class EmailSearchParameters
+    internal class Parameters
     {
-        [JsonPropertyName("query")]
+        [JsonPropertyName(FieldNames.Query)]
         public string Query { get; set; } = string.Empty;
+    }
+
+    private static class FieldNames
+    {
+        public const string Query = "Query";
     }
 }

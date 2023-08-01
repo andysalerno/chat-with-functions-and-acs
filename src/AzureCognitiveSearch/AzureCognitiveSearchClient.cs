@@ -9,16 +9,13 @@ internal class AzureCognitiveSearchClient
     private readonly SearchClient _searchClient;
     private readonly EmbeddingsClient _embeddingsClient;
 
-    public AzureCognitiveSearchClient()
+    public AzureCognitiveSearchClient(Uri endpoint, string indexName, string key)
     {
-        string key = Config.GetConfigurationValue("azureCognitiveSearchKey");
-        string indexName = Config.GetConfigurationValue("indexName");
-        string searchEndpoint = Config.GetConfigurationValue("searchEndpoint");
         string embeddingsEndpoint = Config.GetConfigurationValue("embeddingsEndpoint");
 
         // Initialize Azure Cognitive Search clients
         var searchCredential = new AzureKeyCredential(key);
-        var indexClient = new SearchIndexClient(new Uri(searchEndpoint), searchCredential);
+        var indexClient = new SearchIndexClient(endpoint, searchCredential);
 
         _searchClient = indexClient.GetSearchClient(indexName);
         _embeddingsClient = new EmbeddingsClient(new Uri(embeddingsEndpoint));
@@ -46,7 +43,7 @@ internal class AzureCognitiveSearchClient
         Console.WriteLine($"Uploaded {documents.Count} documents for file {documentTitle}");
     }
 
-    public async Task<IEnumerable<string>> SearchDocumentsAsync(string query, int kNearest = 3)
+    public async Task<IEnumerable<string>> SearchWithEmbeddings(string query, int kNearest = 3)
     {
         Embedding embedding = (await _embeddingsClient.GetEmbeddingsAsync(new[] { query })).Single();
 
@@ -61,6 +58,29 @@ internal class AzureCognitiveSearchClient
         // Interestingly, you can pass `query` as the first argument, to include the original text in the query. Need to explore when this is useful.
         // SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(query, searchOptions);
         SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(null, searchOptions);
+
+        var documentUris = new List<string>();
+
+        await foreach (SearchResult<SearchDocument> result in response.GetResultsAsync())
+        {
+            string uri = result.Document["documentUri"].ToString() ?? throw new NullReferenceException("Expected a document URI on the result, but found none.");
+            Console.WriteLine($"Found document with score: {result.Score}, uri: {uri}");
+            documentUris.Add(uri);
+        }
+
+        return documentUris;
+    }
+
+    public async Task<IEnumerable<string>> SearchWithSemanticSearch(string query)
+    {
+        var options = new SearchOptions
+        {
+            Size = 3,
+            QueryType = SearchQueryType.Semantic,
+            QueryLanguage = QueryLanguage.EnUs,
+            SemanticConfigurationName = "ansalernsemanticconfig",
+        };
+        SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(query, options);
 
         var documentUris = new List<string>();
 
@@ -90,7 +110,8 @@ internal class AzureCognitiveSearchClient
 
     private async Task AddDocumentsToIndex()
     {
-        var searchClient = new AzureCognitiveSearchClient();
+        // Intentionally broken for now:
+        var searchClient = new AzureCognitiveSearchClient(null!, null!, null!);
         var chunker = new DocumentChunker(maxChunkSize: 1600);
 
         // Index document 1

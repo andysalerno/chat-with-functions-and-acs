@@ -48,7 +48,7 @@ internal class ConversationLoop
                 // No function to call, so we're done with this turn.
                 if (nextAIMessage.FunctionCall == null)
                 {
-                    Logger.LogInformation($"Assistant: {nextAIMessage.Content}");
+                    Say($"\nAssistant: {nextAIMessage.Content}\n");
 
                     break;
                 }
@@ -92,10 +92,12 @@ internal class ConversationLoop
 
     private static ChatMessage GetUserChatMessage()
     {
-        Logger.LogInformation("You: ");
+        Say("\nYou: ");
         string text = Console.ReadLine() ?? string.Empty;
+        Say("\n");
 
-        var message = new ChatMessage(ChatRole.User, text);
+        var message = new ChatMessage(ChatRole.User, text.Trim());
+
         return message;
     }
 
