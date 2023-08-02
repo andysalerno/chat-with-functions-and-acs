@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.AI.OpenAI;
 using Functions;
+using Microsoft.Extensions.Logging;
+using static azureai.src.LoggerProvider;
 
 internal class SearchEmailFunction : IFunction
 {
@@ -25,6 +27,8 @@ internal class SearchEmailFunction : IFunction
             ?? throw new InvalidOperationException("Could not parse arguments as Parameters.");
 
         var emails = await _client.SearchEmailsAsync(parameters.Query);
+
+        Logger.LogInformation($"Found email count: {emails.Length}");
 
         return new FunctionResult(
             isSuccess: true,

@@ -31,6 +31,12 @@ internal class ConversationLoop
 
     public async Task RunSessionLoopAsync()
     {
+        {
+            Logger.LogInformation("Starting conversation loop.");
+            string activeFunctions = string.Join(",\n", _functions.Select(f => f.FunctionName));
+            Logger.LogInformation($"Found the following active functions:\n{activeFunctions}");
+        }
+
         while (true)
         {
             // User turn: simply get the message

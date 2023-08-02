@@ -16,8 +16,8 @@ internal class SearchAzureCognitiveSearchFunction : IFunction
 
     public FunctionDefinition FunctionDefinition =>
         new FunctionBuilder(FunctionName)
-            .WithDescription("Search reference documents (manuals, instruction booklets, technical briefs) using a query in plain English")
-            .WithParameter(FieldNames.PlainTextQuery, FunctionBuilder.Type.String, "The question, in plain English text", isRequired: true)
+            .WithDescription("Search reference documents (manuals, instruction booklets, technical briefs) using a question in plain English")
+            .WithParameter(FieldNames.PlainTextQuery, FunctionBuilder.Type.String, "The question, in plain English text. Must truly be a question; e.x. 'Who are The Beatles', NOT 'The Beatles'", isRequired: true)
             .Build();
 
     public async Task<FunctionResult> InvokeAsync(FunctionCall call)
@@ -27,7 +27,7 @@ internal class SearchAzureCognitiveSearchFunction : IFunction
 
         var results = await _searchClient.SearchWithSemanticSearch(parameters.PlainTextQuery);
 
-        return new FunctionResult(isSuccess: true, "result");
+        return new FunctionResult(isSuccess: true, results);
     }
 
     private static class FieldNames

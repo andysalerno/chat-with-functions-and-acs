@@ -14,8 +14,8 @@ internal class AzureCognitiveSearchClient
         string embeddingsEndpoint = Config.GetConfigurationValue("embeddingsEndpoint");
 
         // Initialize Azure Cognitive Search clients
-        var searchCredential = new AzureKeyCredential(key);
-        var indexClient = new SearchIndexClient(endpoint, searchCredential);
+        var credential = new AzureKeyCredential(key);
+        var indexClient = new SearchIndexClient(endpoint, credential);
 
         _searchClient = indexClient.GetSearchClient(indexName);
         _embeddingsClient = new EmbeddingsClient(new Uri(embeddingsEndpoint));
@@ -71,7 +71,7 @@ internal class AzureCognitiveSearchClient
         return documentUris;
     }
 
-    public async Task<IEnumerable<string>> SearchWithSemanticSearch(string query)
+    public async Task<SemanticSearchResponse> SearchWithSemanticSearch(string query)
     {
         var options = new SearchOptions
         {
@@ -79,19 +79,30 @@ internal class AzureCognitiveSearchClient
             QueryType = SearchQueryType.Semantic,
             QueryLanguage = QueryLanguage.EnUs,
             SemanticConfigurationName = "ansalernsemanticconfig",
+            QueryCaption = QueryCaptionType.Extractive,
+            QueryAnswer = QueryAnswerType.Extractive,
         };
         SearchResults<SearchDocument> response = await _searchClient.SearchAsync<SearchDocument>(query, options);
 
-        var documentUris = new List<string>();
+        var finalResult = new SemanticSearchResponse();
 
-        await foreach (SearchResult<SearchDocument> result in response.GetResultsAsync())
+        // In the very best cases, Semantic Search is confident it found some answers for us,
+        // and will populate the Answers property:
+        if (response.Answers?.Any() == true)
         {
-            string uri = result.Document["documentUri"].ToString() ?? throw new NullReferenceException("Expected a document URI on the result, but found none.");
-            Console.WriteLine($"Found document with score: {result.Score}, uri: {uri}");
-            documentUris.Add(uri);
+            finalResult.LikelyAnswers = response.Answers.Select(a => a.Text).ToList();
         }
 
-        return documentUris;
+        // In all cases, any results are represented in the captions property:
+        await foreach (SearchResult<SearchDocument> result in response.GetResultsAsync())
+        {
+            string documentName = result.Document["metadata_storage_name"].ToString() ?? throw new NullReferenceException("Expected a document name on the result, but found none.");
+            Console.WriteLine($"Found document with score: {result.Score}, named: {documentName}");
+
+            finalResult.RelevantExcerpts.AddRange(result.Captions.Select(c => c.Text));
+        }
+
+        return finalResult;
     }
 
     private static SearchDocument CreateDocument(string title, string uri, string content, Embedding embedding)
